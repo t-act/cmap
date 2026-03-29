@@ -5,6 +5,7 @@ from copy import deepcopy
 from scipy.ndimage import minimum_position
 from cmap.utils import nint, cd_main, copy_file
 from cmap.electromagnetics import cal_vecp_2_grid, compute_B_field, elect_posi_grid
+from cmap.field_line_tracer import trace_all_field_lines, _trace_single
 from mfield_sub import (cal_sn,
                             get_PF, elect_posi, get_elf,
                             cal_vecp_2, fitting_bz, error_bz, cal_r2,
@@ -288,8 +289,8 @@ if __name__=="__main__":
             
 
         #. Read vacuum vessel area file
-        #. wq -> Grid の容器壁判定
-        wq = np.loadtxt("modules/ele_posi.csv", delimiter = ",")
+        #. wq -> Grid の容器壁判定 (Numba JIT に渡すため int32 で読込)
+        wq = np.loadtxt("modules/ele_posi.csv", delimiter=",").astype(np.int32)
 
         
         #. Generate or Read the binary file mfile.bin
@@ -586,120 +587,81 @@ if __name__=="__main__":
 
             
             #. Track mag. line main
+            #  (特殊ケース: 電極位置から単一磁力線追跡)
             if rh > 1e29:   #rh = I_tor-open - I_tor-close
                 ir = nint((elect[0, 0] - r_min)/dr) -1
                 iz = nint((elect[0, 1] - z_min)/dz)
 
                 if wq[ir, iz] != -1:    #真空容器内部 or 境界だったら
-                    
-                    #. Inisialise
-                    wq0 = np.copy(wq)
+                    wq0_single = wq.copy()
+                    rr10 = ((A_phi[ir, iz] + A_phi[ir, iz+1])*r[ir]
+                            + (A_phi[ir+1, iz] + A_phi[ir+1, iz+1])*r[ir+1])
+                    wq_f[ir, iz, 1] = _trace_single(
+                        ir, iz, 1, rr10, flux_mag_r, flux_mag_z,
+                        A_phi, wq0_single, wq, r, ir_max+1, iz_max+1)
+                    wq_f[ir, iz, 2] = _trace_single(
+                        ir, iz, 2, rr10, flux_mag_r, flux_mag_z,
+                        A_phi, wq0_single, wq, r, ir_max+1, iz_max+1)
 
-                    #. Vector potentials at grid points.
-                    rr10 = (A_phi[ir, iz] + A_phi[ir, iz+1])*r[ir] \
-                            + (A_phi[ir+1, iz] + A_phi[ir+1, iz+1])*r[ir+1]
 
-                    #. Track mag.line main
-                    i_dir = 1   #sign + -> forward
-                    wq_f[ir, iz, i_dir] = track_mag_line(ir, iz, r, z, i_dir, rr10,
-                                                        flux_mag_r, flux_mag_z,
-                                                        A_phi, wq0, wq)
-                    i_dir = 2   #sign - -> backward
-                    wq_f[ir, iz, i_dir] = track_mag_line(ir, iz, r, z, i_dir, rr10,
-                                                        flux_mag_r, flux_mag_z,
-                                                        A_phi, wq0, wq)
-            
+            #. 全グリッド点の磁力線を Numba prange で並列追跡
+            wq_f_traced = trace_all_field_lines(A_phi, flux_mag_r, flux_mag_z, r, wq)
+            wq_f[:, :, 1] = wq_f_traced[:, :, 1]
+            wq_f[:, :, 2] = wq_f_traced[:, :, 2]
 
-            #. coordinate loop
+            #. 後処理: wq_f[:,:,0], wq_f[:,:,3], I_tor, elf の設定
             for iz in range(iz_max):
                 for ir in range(ir_max):
 
-                    if wq[ir, iz] != -1:    #真空容器内部 or 境界だったら
+                    if wq[ir, iz] != -1:
 
-                        
-                        #. Inisialise
-                        wq0 = np.copy(wq)
+                        r_mid = r[ir] + 0.5*dr  #cell の中心
 
-                        #. Vector potentials at grid points.
-                        rr10 = (A_phi[ir, iz] + A_phi[ir, iz+1])*r[ir] \
-                            + (A_phi[ir+1, iz] + A_phi[ir+1, iz+1])*r[ir+1]
-
-                        #. Track mag.line main
-                        i_dir = 1   #sign + -> forward
-                        wq_f[ir, iz, i_dir] = track_mag_line(ir, iz, r, z, i_dir, rr10,
-                                                            flux_mag_r, flux_mag_z,
-                                                            A_phi, wq0, wq)
-                        i_dir = 2   #sign - -> backward
-                        wq_f[ir, iz, i_dir] = track_mag_line(ir, iz, r, z, i_dir, rr10,
-                                                            flux_mag_r, flux_mag_z,
-                                                            A_phi, wq0, wq)
-
-                        r_mid = r[ir] + 0.5*dr  #cell の中心 
-
-
-
-                        #. 計算結果の記録
                         #閉磁気面内
                         closed_con = (wq_f[ir,iz,1] == 20 and wq_f[ir,iz,2] == 20)  #wq_f = 20 -> 閉磁気面
                         if closed_con:
-                            #. Grid cell が閉じた磁気面に所属している
                             wq_f[ir, iz, 0] = 20
-                        
 
                         #開磁気面（閉磁気面以外）
                         else:
-                            #. 磁力線の一方が特定のCHI電極に交差している場合    
+                            #. 磁力線の一方が特定のCHI電極に交差している場合
                             if ((wq_f[ir, iz, 2] == 1 or wq_f[ir, iz, 2] == 2) and
-                                np.all([wq_f[ir, iz, 1] != 1,
-                                            wq_f[ir, iz, 1] != 2,
-                                            wq_f[ir, iz, 1] != 20,
-                                            elect[wq_f[ir, iz, 1]-1, 2] != 0])
+                                wq_f[ir, iz, 1] != 1 and
+                                wq_f[ir, iz, 1] != 2 and
+                                wq_f[ir, iz, 1] != 20 and
+                                elect[wq_f[ir, iz, 1]-1, 2] != 0
                                 ):
 
-                                wq_f[ir, iz, 0] = wq_f[ir, iz, 1]   #なぞ？
+                                wq_f[ir, iz, 0] = wq_f[ir, iz, 1]
 
                                 I_tor[wq_f[ir, iz, 0]-1] += \
-                                    mu*I_tf_total/(2*pi*r_mid)*elect[wq_f[ir, iz, 0]-1, 2]*dr*dz                        
-
+                                    mu*I_tf_total/(2*pi*r_mid)*elect[wq_f[ir, iz, 0]-1, 2]*dr*dz
 
                             #. 磁力線の他方の端が特定の電極に交差している場合
                             elif ((wq_f[ir, iz, 1] == 1 or wq_f[ir, iz, 1] == 2) and
-                                    np.all([wq_f[ir, iz, 2] != 1,
-                                            wq_f[ir, iz, 2] != 2,
-                                            wq_f[ir, iz, 2] != 20,
-                                            elect[wq_f[ir, iz, 2]-1, 2] != 0])
-                                    ): 
-
-                                wq_f[ir, iz, 0] = wq_f[ir, iz, 2]   #なぞ？
-                                
-                                I_tor[wq_f[ir, iz, 0]-1] += \
-                                    mu*I_tf_total/(2*pi*r_mid)*elect[wq_f[ir, iz, 0]-1, 2]*dr*dz
-                                
-
-                            #. 電極の間に位置する場合
-                            elif (np.all(elect[wq_f[ir, iz, 1:3]-1, 2] > 0.1)) \
-                                    and (np.all(wq_f[ir, iz, 1:3] != 20)
+                                    wq_f[ir, iz, 2] != 1 and
+                                    wq_f[ir, iz, 2] != 2 and
+                                    wq_f[ir, iz, 2] != 20 and
+                                    elect[wq_f[ir, iz, 2]-1, 2] != 0
                                     ):
 
-                                #. 電極間で特定の範囲にある場合
-                                if (3 <= wq_f[ir,iz,1] <= 10 
+                                wq_f[ir, iz, 0] = wq_f[ir, iz, 2]
+
+                                I_tor[wq_f[ir, iz, 0]-1] += \
+                                    mu*I_tf_total/(2*pi*r_mid)*elect[wq_f[ir, iz, 0]-1, 2]*dr*dz
+
+                            #. 電極の間に位置する場合
+                            elif (np.all(elect[wq_f[ir, iz, 1:3]-1, 2] > 0.1)
+                                    and np.all(wq_f[ir, iz, 1:3] != 20)
+                                    ):
+
+                                if (3 <= wq_f[ir,iz,1] <= 10
                                     and 3 <= wq_f[ir,iz,2] <= 10
                                     ):
                                     wq_f[ir,iz,3] = wq_f[ir,iz,1]
                                     elf[ir,iz] = get_elf(min(wq_f[ir,iz,1], wq_f[ir,iz,2]), elf0)
 
-                                    # if t_ana >= t_decay:
-                                    #     # 2024.11.06 Update by MOTOKI
-                                    #     elf[ir,iz] = get_elf(min(wq_f[ir,iz,1], wq_f[ir,iz,2]), elf0)
-                                    # else:
-                                    #     elf[ir,iz] = elf0
-                    
-                    #. --   endif wq != -1
-                    
-                #. --
-            #. -- end coordinate loop
-            
-            wq_f[:, :, 3] += wq_f[:, :, 0]  #なんだこれ
+            wq_f[:, :, 3] += wq_f[:, :, 0]
         #. --   end track mag. line
 
 
