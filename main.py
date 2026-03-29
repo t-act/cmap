@@ -4,6 +4,7 @@ from tqdm import tqdm
 from copy import deepcopy
 from scipy.ndimage import minimum_position
 from cmap.utils import nint, cd_main, copy_file
+from cmap.electromagnetics import cal_vecp_2_grid, compute_B_field, elect_posi_grid
 from mfield_sub import (cal_sn,
                             get_PF, elect_posi, get_elf,
                             cal_vecp_2, fitting_bz, error_bz, cal_r2,
@@ -312,29 +313,16 @@ if __name__=="__main__":
 
         #. Start calcurating
         #. Calculate the vector potential of the vacuum field for each grid
-        gmin_0, gmax_0 = 1e29, -1e29
-        A_phi = np.zeros((ir_max+1, iz_max+1))
-        mv_field, mv_field_l = np.zeros_like(A_phi), np.zeros_like(A_phi)
-        Bz = np.zeros_like(A_phi)
+        #  (ベクトル化版: 二重ループを cal_vecp_2_grid に置換)
+        _, Bz, _, A_phi = cal_vecp_2_grid(k, r_c, z_c, I_pf_c, r, z)
+        A_phi_0 = A_phi.copy()
+        mv_field = A_phi_0 * 2 * pi * r[:, np.newaxis]
 
-        for iz in range(iz_max+1):
-            for ir in range(ir_max+1):
-                _, sbz, _, ssbz = cal_vecp_2(k, r_c, z_c, I_pf_c, r[ir], z[iz])
-                A_phi[ir, iz] = ssbz
-                Bz[ir, iz] = sbz
-
-                if elect_posi(r[ir], z[iz]) == True:
-                    mv_field_l[ir, iz] = 1e29
-                else:
-                    mv_field_l[ir, iz] = ssbz * 2*pi*r[ir]
-
-                if gmin_0 > mv_field[ir, iz]:
-                    gmin_0 = mv_field[ir, iz]
-                if gmax_0 < mv_field[ir, iz]:
-                    gmax_0 = mv_field[ir, iz]
-
-        A_phi_0 = deepcopy(A_phi)
-        mv_field[:,:] = A_phi_0 * 2*pi*r[:,np.newaxis]
+        R_grid, Z_grid = np.meshgrid(r, z, indexing='ij')
+        electrode_mask = elect_posi_grid(R_grid, Z_grid)
+        mv_field_l = np.where(electrode_mask, 1e29, A_phi * 2 * pi * r[:, np.newaxis])
+        gmin_0 = np.min(mv_field)
+        gmax_0 = np.max(mv_field)
 
         n = 0
         np.savetxt(f"{path}/data/MV_field.csv", mv_field.T, delimiter=",", fmt="%12.4e")
@@ -593,14 +581,8 @@ if __name__=="__main__":
             I_tor[:] = 0
 
             #. Setup magnitude of flux and wq
-            for iz in range(iz_max):
-                for ir in range(ir_max):
-                    flux_mag_r[ir, iz] = -((A_phi[ir, iz+1] + A_phi[ir+1, iz+1])*0.5\
-                                        -(A_phi[ir, iz] + A_phi[ir+1, iz])*0.5)/dz
-                    
-                    flux_mag_z[ir, iz] = ((A_phi[ir+1, iz] + A_phi[ir+1, iz+1])*0.5*r[ir+1]\
-                                        -(A_phi[ir, iz] + A_phi[ir, iz+1])*0.5*r[ir])\
-                                        /(dr * (r[ir]+0.5*dr))
+            #  (ベクトル化版: 二重ループを compute_B_field に置換)
+            flux_mag_r, flux_mag_z = compute_B_field(A_phi, r, dr, dz, ir_max, iz_max)
 
             
             #. Track mag. line main
