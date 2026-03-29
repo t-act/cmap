@@ -10,83 +10,14 @@ import get_data as g
 from sklearn.metrics import r2_score
 
 from cmap.utils import nint, cd_main, copy_file
+from cmap.tokamak_config import elect_posi, cal_sn, get_PF
 
-def elect_posi(r, z):
-    """Judge electrode position"""
-    conditions = [
-        r < 0.22,
-        r > 1.2,
-        z > 1.0,
-        r < 0.280 and z < -1.13,
-        r < 0.389 and z < -1.32,
-        r >= 0.389 and z < -1.165,
-        z > -1.0694 * r - 0.14326 and z < 1.2956 * r - 1.84223 and r > 0.74833,
-        (r - 0.78983)**2 + (z + 0.91089)**2 < 0.053**2,
-        z > -1.2956 * r + 1.84223
-    ]
-    
-    return any(conditions)
 
 def check_con(t_ana, t_inj_0, A, B):
     if t_ana >= t_inj_0:
         return A or B
     else:
         return A and B
-
-
-
-
-
-def cal_sn(elect0, elect, path):
-    sn_r0, sn_z0 = np.zeros(19), np.zeros(19) #normal vector(sn_r, sn_z)
-    sn_r, sn_z = np.zeros(19), np.zeros(19)
-    electrode_data = []
-    electrode_data.append([elect0[0, 0], elect0[0, 1], 0])
-
-    for i in range(18):
-        if elect0[i, 0] > 0.1 and elect0[i+1, 0] > 0.1:
-            electrode_data.append([elect0[i+1,0], elect0[i+1, 1], 0])
-            sn_0 = np.sqrt((elect0[i+1, 0] - elect0[i, 0])**2 + (elect0[i+1, 1] - elect0[i, 1])**2)\
-                    *2*np.pi*(elect0[i+1, 0] + elect0[i, 0])*0.5
-            e_r0 = (elect0[i+1, 0] - elect0[i, 0])\
-                    /np.sqrt((elect0[i+1, 0] - elect0[i, 0])**2 + (elect0[i+1, 1] - elect0[i, 1])**2)
-            e_z0 = (elect0[i+1, 1] - elect0[i, 1])\
-                    /np.sqrt((elect0[i+1, 0] - elect0[i, 0])**2 + (elect0[i+1, 1] - elect0[i, 1])**2)
-
-            sn_r0[i] = -e_z0*sn_0
-            sn_z0[i] = e_r0*sn_0
-        
-
-        if elect[i, 0] > 0.1 and elect[i+1, 0] > 0.1:
-            sn = np.sqrt((elect[i+1, 0] - elect[i, 0])**2 + (elect[i+1, 1] - elect[i, 1])**2)\
-                *2*np.pi*(elect[i+1, 0] + elect[i, 0])*0.5
-            e_r = (elect[i+1, 0] - elect[i, 0])\
-                /np.sqrt((elect[i+1, 0] - elect[i, 0])**2 + (elect[i+1, 1] - elect[i, 1])**2)
-            e_z = (elect[i+1, 1] - elect[i, 1])\
-                /np.sqrt((elect[i+1, 0] - elect[i, 0])**2 + (elect[i+1, 1] - elect[i, 1])**2)
-
-            sn_r[i] = -e_z*sn
-            sn_z[i] = e_r*sn
-        
-    electrode_data = np.array(electrode_data)
-    np.savetxt(f"{path}/electrode.csv", electrode_data, delimiter=",", fmt="%.6f")
-
-    return sn_r0, sn_z0, sn_r, sn_z
-
-
-
-def get_PF():
-    """
-    PF and TF data from PFdata.csv
-
-    Return
-    ---
-    PF (np.array) : [A] 
-        PF3-1, 3-2, 2, 1, 7, 6, 5-2, 5-1, 4-1, 4-2, 4-3
-    TF (np.array) : [A]
-    """
-    data = np.genfromtxt("modules/PFdata.csv", delimiter = ",", skip_footer = 4)
-    return data[1:12]*1e3, data[12]*1e3
 
 
 
@@ -101,8 +32,8 @@ def cal_vecp_2(k, r_c, z_c, I_pf_c, r, z):
     r_c     (np.array) : R coil positions
     z_c     (np.array) : Z coil positions
     I_pf_c  (np.array) : Poloidal coil currents
-    r       (np.array) 
-    z       (np.array)       
+    r       (np.array)
+    z       (np.array)
 
     Returns
     ---
@@ -126,7 +57,7 @@ def cal_vecp_2(k, r_c, z_c, I_pf_c, r, z):
 
     for ik in range(k):
         zc = z_c[ik]
-        
+
         # コイルの位置と入力値が非常に近い場合
         if np.abs(r_c[ik] - r) < 5e-4 and np.abs(z_c[ik] - z) < 5e-4:
             zc += 5e-4
@@ -139,18 +70,18 @@ def cal_vecp_2(k, r_c, z_c, I_pf_c, r, z):
         k_sq = 4.0 * r_c[ik] * r / (rp_sq + z_sq)
         e = 1 - k_sq
         lg_e = np.log(1./e, dtype = np.float64)
-        
+
         # 楕円積分の計算
         KD = (1.38629436112 + 0.09666344259 * e + 0.03590092383 * (e**2) +
               0.03742563713 * (e**3) + 0.01451196212 * (e**4) +
               (0.5 + 0.12498593597 * e + 0.06880248576 * (e**2) +
               0.03328355346 * (e**3) + 0.00441787012 * (e**4)) * lg_e)
-        
+
         ED = (1.0 + 0.44325141463 * e + 0.0626060122 * (e**2) +
               0.04757383546 * (e**3) + 0.01736506451 * (e**4) +
               (0.2499836831 * e + 0.09200180037 * (e**2) +
               0.04069697526 * (e**3) + 0.00526449639 * (e**4)) * lg_e)
-        
+
         # 磁場とベクトルポテンシャルの計算
         if np.abs(r) < 1e-6 or np.abs(r_c[ik]) < 1e-6:
             Br = 0
@@ -158,7 +89,7 @@ def cal_vecp_2(k, r_c, z_c, I_pf_c, r, z):
         else:
             Br = 2.0e-7 * ((z - zc) / rp_z) * (-KD + (r_c_sq[ik] + r_sq + z_sq) * ED / (rm_sq + z_sq)) / r
             A_phi = 2.0e-7 * np.sqrt(r_c[ik] / (r * k_sq)) * ((2.0 - k_sq) * KD - 2.0 * ED)
-        
+
         Bz = 2.0e-7 * (1 / rp_z) * (KD + (r_c_sq[ik] - r_sq - z_sq) * ED / (rm_sq + z_sq))
         psi = 2 * np.pi * r * A_phi
 
@@ -198,7 +129,7 @@ def fitting_bz(z_puc, bz_puc):
 
     # 3次関数でFitting
     wei = np.ones_like(bz_puc_re)
-    wei[0] = 5 
+    wei[0] = 5
     wei[1] = 3
     wei[-1] = 5
     wei[-2] = 3
@@ -256,7 +187,7 @@ def error_bz(Bz_cal_puc, Bz_vac_puc, fit_params, weights):
 
     z_re = np.delete(z_re, [3, 5])
     bz_re = np.delete(bz_re, [3, 5])
-    
+
     fit_func = np.poly1d(fit_params)
     bz_fit = fit_func(z_re)
 
@@ -288,10 +219,6 @@ def get_elf(wq_min, fac):
 
 
 
-
-
-
-
 # -- plot --
 def plot_field(m_in, m_out, I_tor, path, time_path, num):
     """
@@ -304,7 +231,7 @@ def plot_field(m_in, m_out, I_tor, path, time_path, num):
     path  (str)      : path of background pic., M_field, J_field and electrode
     num   (int)      : M_field and J_field file name
     """
-    
+
     # Qvessel.pngを背景画像として読み込む
     qvessel_img = Image.open(f"modules/Qvessel.png")
 
@@ -327,7 +254,7 @@ def plot_field(m_in, m_out, I_tor, path, time_path, num):
 
     # plot vector (J-field)
     J_f_non_zero = J_field[(J_field[:, 2] != 0) | (J_field[:, 3] != 0)]
-    ax.quiver(J_f_non_zero[:, 0], J_f_non_zero[:, 1], J_f_non_zero[:, 2], J_f_non_zero[:, 3], 
+    ax.quiver(J_f_non_zero[:, 0], J_f_non_zero[:, 1], J_f_non_zero[:, 2], J_f_non_zero[:, 3],
               color = 'red', scale=1, scale_units='xy', width=0.005)
 
     # plot mag. contour
@@ -336,7 +263,7 @@ def plot_field(m_in, m_out, I_tor, path, time_path, num):
     y = np.linspace(-201, 201, Z.shape[0])
     X, Y = np.meshgrid(x, y)
     ax.contour(X*1e-2, Y*1e-2, Z,
-                        levels = sorted([m_in, m_out]), 
+                        levels = sorted([m_in, m_out]),
                         colors = "blue", alpha = 0.5, linewidths = 2)
 
     # plot electrode
@@ -374,7 +301,7 @@ def plot_field2(m_in, t_ana, path):
     path  (str)      : path of background pic., M_field, J_field and electrode
     num   (int)      : M_field and J_field file name
     """
-    
+
     # Qvessel.pngを背景画像として読み込む
     qvessel_img = Image.open(f"modules/Qvessel.png")
 
@@ -397,7 +324,7 @@ def plot_field2(m_in, t_ana, path):
 
     # plot vector (J-field)
     J_f_non_zero = J_field[(J_field[:, 2] != 0) | (J_field[:, 3] != 0)]
-    ax.quiver(J_f_non_zero[:, 0], J_f_non_zero[:, 1], J_f_non_zero[:, 2], J_f_non_zero[:, 3], 
+    ax.quiver(J_f_non_zero[:, 0], J_f_non_zero[:, 1], J_f_non_zero[:, 2], J_f_non_zero[:, 3],
               color = 'red', scale=1, scale_units='xy', width=0.005)
 
     # plot mag. contour
@@ -454,7 +381,7 @@ def plot_z_Bz(mv_flux, vac_flux, path, num, z_puc, bz_puc, sq_error):
     bz_vac = vac_flux[:,1]
 
     # plot figure
-    fig, ax = plt.subplots(1, 1, figsize = (6, 8))    
+    fig, ax = plt.subplots(1, 1, figsize = (6, 8))
 
     fig.subplots_adjust(wspace = 0.2, hspace = 0.16)
     plt.rcParams["font.family"] = "Arial"
@@ -464,9 +391,9 @@ def plot_z_Bz(mv_flux, vac_flux, path, num, z_puc, bz_puc, sq_error):
     ax.tick_params(axis = "x", which = "major", direction = "in")
     ax.tick_params(axis = "y", which = "major", direction = "in")
 
-    ax.scatter((bz-bz_vac)*1e3, z, lw = 2, marker = "o", 
+    ax.scatter((bz-bz_vac)*1e3, z, lw = 2, marker = "o",
             label = "Result", c = "steelblue")
-    ax.scatter(bz_puc*1e3, z_puc, lw = 2, marker = "x", 
+    ax.scatter(bz_puc*1e3, z_puc, lw = 2, marker = "x",
                label = "Pick up coil", c = "orangered")
 
     ax.legend(fontsize = 15,
@@ -512,7 +439,7 @@ def plot_z_Bz2(path, t_ana, z_puc, bz_puc, sq_error):
     bz_vac = data[:,2]
 
     # plot figure
-    fig, ax = plt.subplots(1, 1, figsize = (6, 8))    
+    fig, ax = plt.subplots(1, 1, figsize = (6, 8))
 
     fig.subplots_adjust(wspace = 0.2, hspace = 0.16)
     plt.rcParams["font.family"] = "Arial"
@@ -522,9 +449,9 @@ def plot_z_Bz2(path, t_ana, z_puc, bz_puc, sq_error):
     ax.tick_params(axis = "x", which = "major", direction = "in")
     ax.tick_params(axis = "y", which = "major", direction = "in")
 
-    ax.scatter((bz-bz_vac)*1e3, z, lw = 2, marker = "o", 
+    ax.scatter((bz-bz_vac)*1e3, z, lw = 2, marker = "o",
             label = "Result", c = "steelblue")
-    ax.scatter(bz_puc*1e3, z_puc, lw = 2, marker = "x", 
+    ax.scatter(bz_puc*1e3, z_puc, lw = 2, marker = "x",
                label = "Pick up coil", c = "orangered")
 
     ax.legend(fontsize = 15,
@@ -563,7 +490,7 @@ def plot_t_Bz(t_puc, bz_puc, t_ip, ip, it, count, path):
         ref. TAKEDA, master thesis. P18
     t      (np.array)      : [s] 1MS/s
     Ip     (np.array)      : [kA]
-    it     (int)           : Analysis time index 
+    it     (int)           : Analysis time index
     count  (int)           : Shot number
     path   (str)           : Save folder path
     """
@@ -591,7 +518,7 @@ def plot_t_Bz(t_puc, bz_puc, t_ip, ip, it, count, path):
     ax[0].invert_yaxis()
 
     [ax[1].plot(t_puc*1e3, bz_puc[:,i]*1e3) for i in range(12)]
-    
+
     ax[-1].set_xlabel(r"$\mathrm{Time \, [ms]}$", fontsize = 15)
     ax[0].set_ylabel(r"$I \, \mathrm{[kA]}$", fontsize = 15)
     ax[1].set_ylabel(r"$B_\mathrm{z} \, \mathrm{[mT]}$", fontsize = 15)
@@ -662,10 +589,6 @@ def plot_psi(m_in, t_ana, path):
 
 
 
-
-
-
-
 #. test
 if __name__ == "__main__":
     # Example usage
@@ -703,6 +626,3 @@ if __name__ == "__main__":
 
         plt.scatter(bz, z)
         plt.show()
-
-
-    
