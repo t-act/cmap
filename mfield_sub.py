@@ -9,8 +9,8 @@ from PIL import Image
 import get_data as g
 from sklearn.metrics import r2_score
 
-from cmap.utils import nint, cd_main, copy_file
-from cmap.tokamak_config import elect_posi, cal_sn, get_PF
+from cmaplib.utils import nint, cd_main, copy_file
+from cmaplib.tokamak_config import elect_posi, cal_sn, get_PF
 
 
 def check_con(t_ana, t_inj_0, A, B):

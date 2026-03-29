@@ -6,9 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 
-from cmap.utils import nint, cd_main
-from cmap.grid import Grid
-from cmap.tokamak_config import TokamakConfig
+from cmaplib.utils import nint, cd_main
+from cmaplib.grid import Grid
+from cmaplib.tokamak_config import TokamakConfig
 
 
 # ---------------------------------------------------------------------------

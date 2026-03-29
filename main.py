@@ -3,10 +3,10 @@ from icecream import ic
 from tqdm import tqdm
 from copy import deepcopy
 from scipy.ndimage import minimum_position
-from cmap.utils import nint, cd_main, copy_file
-from cmap.electromagnetics import cal_vecp_2_grid, compute_B_field, elect_posi_grid
-from cmap.field_line_tracer import trace_all_field_lines, _trace_single
-from cmap.greens_function import GreenFunction
+from cmaplib.utils import nint, cd_main, copy_file
+from cmaplib.electromagnetics import cal_vecp_2_grid, compute_B_field, elect_posi_grid
+from cmaplib.field_line_tracer import trace_all_field_lines, _trace_single
+from cmaplib.greens_function import GreenFunction
 from mfield_sub import (cal_sn,
                             get_PF, elect_posi, get_elf,
                             cal_vecp_2, fitting_bz, error_bz, cal_r2,
