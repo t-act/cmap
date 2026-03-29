@@ -6,6 +6,7 @@ from scipy.ndimage import minimum_position
 from cmap.utils import nint, cd_main, copy_file
 from cmap.electromagnetics import cal_vecp_2_grid, compute_B_field, elect_posi_grid
 from cmap.field_line_tracer import trace_all_field_lines, _trace_single
+from cmap.greens_function import GreenFunction
 from mfield_sub import (cal_sn,
                             get_PF, elect_posi, get_elf,
                             cal_vecp_2, fitting_bz, error_bz, cal_r2,
@@ -244,6 +245,14 @@ if __name__=="__main__":
     m_in_data = []
     I_close_before = -50e3
 
+    #. -- 時間ループ外でロード (毎 time step で再ロードしない) --
+    #. wq -> 容器壁判定グリッド (Numba JIT に渡すため int32)
+    wq = np.loadtxt("modules/ele_posi.csv", delimiter=",").astype(np.int32)
+
+    #. GreenFunction: A_0 (101×201×101×201 ≈ 3.4 GB) を一度だけロード
+    gf = GreenFunction("modules/mfile_py.bin")
+    A_0 = gf.A_0  # フィラメント電流更新で直接参照
+
 
 
 #. == Time loop start ==
@@ -288,28 +297,7 @@ if __name__=="__main__":
         sn_r0, sn_z0, sn_r, sn_z = cal_sn(elect0, elect, path)
             
 
-        #. Read vacuum vessel area file
-        #. wq -> Grid の容器壁判定 (Numba JIT に渡すため int32 で読込)
-        wq = np.loadtxt("modules/ele_posi.csv", delimiter=",").astype(np.int32)
-
-        
-        #. Generate or Read the binary file mfile.bin
-        A_0 = np.zeros((ir_max+1, iz_max+1, ir_max+1, iz_max+1))
-
-        if not os.path.exist("modules/mfile_py.bin"):
-            for iz2 in range(iz_max+1):
-               for ir2 in range(ir_max+1):
-                   r_mid = r[ir2] + 0.5*dr
-                   z_mid = z[iz2] + 0.5*dz        
-                   for iz in range(iz_max+1):
-                       for ir in range(ir_max+1):
-                           A_0[ir, iz, ir2, iz2] \
-                               = cal_vecp_2(1, np.array([r_mid]), np.array([z_mid]), np.array([1]), r[ir], z[iz])[3]
-            A_0.tofile('modules/mfile_py.bin')
-
-        A_0 = np.fromfile(
-                    'modules/mfile_py.bin', dtype = np.float64
-                    ).reshape(ir_max+1, iz_max+1, ir_max+1, iz_max+1)
+        #. wq, A_0 はループ外でロード済み (時間ループ前を参照)
         
 
         #. Start calcurating
@@ -773,30 +761,14 @@ if __name__=="__main__":
         #. --
 
         #. -- Caluculate Toroidal current from Lambda value --
+            #  (ベクトル化版: 二重ループを GreenFunction.accumulate_fields に置換)
             A_phi_before = deepcopy(A_phi[:,:])
             I_tor[:] = 0
-            A_phi_open[:], A_phi_close[:] = 0, 0
-            wq_l = np.full_like(wq, 1000)
-            
-            for iz in range(iz_max):
-                for ir in range(ir_max):
-                    
-                    r_mid = r[ir] + 0.5*dr
-                    z_mid = z[iz] + 0.5*dz
 
-                #. Close surface
-                    if wq_f[ir,iz,3] == 20:
-                        I_tor_close = mu*I_tf_total/(2*pi*r_mid)*dr*dz
-                        I_tor[-1] += I_tor_close
-                        A_phi_close[:,:] += I_tor_close*A_0[:,:,ir,iz]
-                        wq_l[ir,iz] = ir
-
-                #. Open surface
-                    elif wq_f[ir,iz,3] != 0:
-                        # 2024.10.30 Update by MOTOKI
-                        I_tor_open = mu*I_tf_total/(2*pi*r_mid)*lamb[wq_f[ir,iz,3]-1]*elf[ir,iz]*dr*dz
-                        I_tor[wq_f[ir,iz,3]-1] += I_tor_open
-                        A_phi_open[:,:] += I_tor_open*A_0[:,:,ir,iz]
+            A_phi_close, A_phi_open, _I_tor_close, _I_tor_open_delta, wq_l = \
+                gf.accumulate_fields(wq_f, elf, lamb, r, dr, dz, mu, I_tf_total, pi)
+            I_tor[:20] = _I_tor_open_delta   # indices 0-18: 開磁気面 (λ適用済み), 19=0
+            I_tor[-1]  = _I_tor_close        # 閉磁気面合計 (λ[-1] はこの後適用)
 
             Itor_cal_inp = np.abs(I_tor_def_new) - np.abs(np.sum(I_tor[0:20]))
             rh = 1.e30
