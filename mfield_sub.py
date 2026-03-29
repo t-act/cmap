@@ -6,19 +6,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from PIL import Image
-import decimal
 import get_data as g
 from sklearn.metrics import r2_score
-import shutil
 
-
-
-#. -- Other --
-def cd_main():
-    """Change main directory command"""
-    py_path = os.path.dirname(__file__)
-    os.chdir(os.path.join(py_path, '..'))
-    print(f"Current directory :: {os.getcwd()}")
+from cmap.utils import nint, cd_main, copy_file
 
 def elect_posi(r, z):
     """Judge electrode position"""
@@ -42,32 +33,8 @@ def check_con(t_ana, t_inj_0, A, B):
     else:
         return A and B
 
-def copy_file(src, dest):
-    """
-    ファイルをコピーする関数
-
-    Parameters:
-    src (str): コピー元のファイルパス
-    dest (str): コピー先のファイルパス
-    """
-    try:
-        shutil.copy(src, dest)
-    except Exception as e:
-        print(f"ファイルコピー中にエラーが発生しました: {e}")
 
 
-
-
-
-
-# -- Cal. --
-def nint(value):
-    """四捨五入でint型に変換
-    Fortranのnintと同様の動作を保証
-    """
-    with decimal.localcontext() as ctx:
-        ctx.rounding = decimal.ROUND_HALF_UP
-        return int(decimal.Decimal(float(value)).to_integral_value())
 
 
 def cal_sn(elect0, elect, path):

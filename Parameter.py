@@ -3,23 +3,9 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import decimal
 from PIL import Image
 
-
-
-def nint(value):
-    """四捨五入でint型に変換
-    Fortranのnintと同様の動作を保証
-    """
-    with decimal.localcontext() as ctx:
-        ctx.rounding = decimal.ROUND_HALF_UP
-        return int(decimal.Decimal(float(value)).to_integral_value())
-def cd_main():
-    """Change main directory command"""
-    py_path = os.path.dirname(__file__)
-    os.chdir(os.path.join(py_path, '..'))
-    print(f"Current directory :: {os.getcwd()}")
+from cmap.utils import nint, cd_main
 
 
 """

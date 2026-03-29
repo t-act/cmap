@@ -3,7 +3,8 @@ from icecream import ic
 from tqdm import tqdm
 from copy import deepcopy
 from scipy.ndimage import minimum_position
-from mfield_sub import (cd_main, nint, copy_file, cal_sn,
+from cmap.utils import nint, cd_main, copy_file
+from mfield_sub import (cal_sn,
                             get_PF, elect_posi, get_elf,
                             cal_vecp_2, fitting_bz, error_bz, cal_r2,
                             plot_field, plot_field2, plot_z_Bz, plot_psi, plot_z_Bz2
