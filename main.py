@@ -6,13 +6,14 @@ import numpy as np
 from tqdm import tqdm
 
 from cmaplib.utils import nint, cd_main
+from cmaplib.grid import Grid
+from cmaplib.tokamak_config import TokamakConfig
 from cmaplib.electromagnetics import cal_vecp_2_grid, elect_posi_grid
 from cmaplib.greens_function import GreenFunction
 from cmaplib.plotting import plot_magnetic_field, plot_bz_profile, plot_psi
 from cmaplib.results import ResultsManager
 from cmaplib.solver import EquilibriumSolver
-from mfield_sub import cal_sn, get_PF, cal_vecp_2, fitting_bz, cal_r2
-from Parameter import ele_lim, elect0, elect, flux, r_c, z_c
+from mfield_sub import cal_vecp_2, fitting_bz, cal_r2
 import get_data as g
 
 
@@ -25,18 +26,22 @@ if __name__ == "__main__":
     pi = 3.1415926535
     mu = 4.*pi*1.e-7
 
-    #. -- グリッド --
-    ir_min, ir_max = 0, 100
-    dr = 0.02
-    r_min, r_max = 0.0, 2.0
-    r = np.arange(r_min, r_max+dr, dr)
+    #. -- グリッド / 装置形状 --
+    grid   = Grid()
+    config = TokamakConfig()
 
-    iz_min, iz_max = 0, 200
-    dz = 0.02
-    z_min, z_max = -2.0, 2.0
-    z = np.arange(z_min, z_max+dz, dz)
-
-    dl = 0.02
+    # ローカルエイリアス (ループ内の可読性維持)
+    r, z     = grid.r, grid.z
+    dr, dz   = grid.dr, grid.dz
+    r_min    = grid.r_min
+    z_min    = grid.z_min
+    ir_max   = grid.ir_max
+    iz_max   = grid.iz_max
+    dl       = grid.dl
+    elect0   = config.elect0
+    elect    = config.elect
+    flux     = config.flux
+    r_c, z_c = config.r_c, config.z_c
 
     #. -- 実験データ取得 --
     count = 53034
@@ -74,14 +79,14 @@ if __name__ == "__main__":
     wq = np.loadtxt("modules/ele_posi.csv", delimiter=",").astype(np.int32)
     gf = GreenFunction("modules/mfile_py.bin")
 
-    solver = EquilibriumSolver(r, z, dr, dz, pi, mu, dl, elect, flux, ele_lim, wq, gf)
+    solver = EquilibriumSolver(grid, config, wq, gf, pi, mu)
 
     #. == 時間ループ ==
     for t_ana in tqdm(t_ana_arr, leave=False, desc="time"):
         print(f"\nShot number : {count}\nt_ana = {t_ana:.3f} ms")
 
         #. TF / PF コイル設定
-        PF_coil, TF_coil = get_PF()
+        PF_coil, TF_coil = config.load_pf_currents()
         I_tf_total = TF_coil * 16
 
         I_pf_c = np.zeros(55)
@@ -100,7 +105,7 @@ if __name__ == "__main__":
                 if (i == 9 or i == 11) and j == 6:
                     break
 
-        sn_r0, sn_z0, sn_r, sn_z = cal_sn(elect0, elect, path)
+        sn_r0, sn_z0, sn_r, sn_z = config.compute_electrode_normals(path)
 
         #. 真空場計算
         _, Bz, _, A_phi = cal_vecp_2_grid(k, r_c, z_c, I_pf_c, r, z)

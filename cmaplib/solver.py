@@ -25,34 +25,30 @@ class EquilibriumSolver:
 
     Parameters
     ----------
-    r, z        : グリッド座標配列
-    dr, dz      : グリッド間隔
-    pi, mu, dl  : 物理定数
-    elect       : 電極配列 (20, 3)
-    flux        : フラックスループ配列 (118, *)
-    ele_lim     : LCFS 外側制限点 [r, z]
-    wq          : グリッド要素割り当て配列 (ir_max, iz_max)
-    gf          : GreenFunction インスタンス
+    grid   : Grid インスタンス
+    config : TokamakConfig インスタンス
+    wq     : グリッド要素割り当て配列 (ir_max, iz_max)
+    gf     : GreenFunction インスタンス
+    pi, mu : 物理定数
     """
 
-    def __init__(self, r, z, dr, dz, pi, mu, dl,
-                 elect, flux, ele_lim, wq, gf) -> None:
-        self.r       = r
-        self.z       = z
-        self.dr      = dr
-        self.dz      = dz
+    def __init__(self, grid, config, wq, gf, pi, mu) -> None:
+        self.r       = grid.r
+        self.z       = grid.z
+        self.dr      = grid.dr
+        self.dz      = grid.dz
+        self.dl      = grid.dl
         self.pi      = pi
         self.mu      = mu
-        self.dl      = dl
-        self.elect   = elect
-        self.flux    = flux
-        self.ele_lim = ele_lim
+        self.elect   = config.elect
+        self.flux    = config.flux
+        self.ele_lim = config.ele_lim
         self.wq      = wq
         self.gf      = gf
-        self.ir_max  = len(r) - 1   # 100
-        self.iz_max  = len(z) - 1   # 200
-        self.r_min   = float(r[0])
-        self.z_min   = float(z[0])
+        self.ir_max  = grid.ir_max
+        self.iz_max  = grid.iz_max
+        self.r_min   = grid.r_min
+        self.z_min   = grid.z_min
 
     # ------------------------------------------------------------------
     @staticmethod
