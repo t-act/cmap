@@ -239,3 +239,32 @@ class TokamakConfig:
 
     def load_pf_currents(self):
         return get_PF()
+
+    def build_pf_coil_currents(self) -> tuple[np.ndarray, float]:
+        """PFdata.csv を読み込み、全 55 素コイルの電流配列と I_tf_total を返す。
+
+        Returns
+        -------
+        I_pf_c     : np.ndarray (55,)  各素コイル電流 [A]
+        I_tf_total : float             TF 総電流 [A]
+        """
+        PF_coil, TF_coil = self.load_pf_currents()
+        I_tf_total = TF_coil * 16
+
+        I_pf_c = np.zeros(55)
+        I_pf_c[[0, 1]]      = PF_coil[[0, 1]] * 41
+        I_pf_c[[2, 5]]      = PF_coil[[2, 5]] * 36
+        I_pf_c[[3, 4]]      = PF_coil[[3, 4]] * 12
+        I_pf_c[[6, 7]]      = PF_coil[[6, 7]] * 41
+        I_pf_c[[8, 9, 10]]  = PF_coil[[8, 9, 10]] * 36
+        I_pf_c[8] /= 13;  I_pf_c[9] /= 17;  I_pf_c[10] /= 13
+
+        k = 10
+        for i in range(8, 11):
+            for j in range(1, 9):
+                k += 1;  I_pf_c[k] = I_pf_c[i]
+                k += 1;  I_pf_c[k] = I_pf_c[i]
+                if (i == 9 or i == 11) and j == 6:
+                    break
+
+        return I_pf_c, I_tf_total
