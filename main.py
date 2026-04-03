@@ -32,6 +32,8 @@ if __name__ == "__main__":
     os.makedirs(f"{path}/img",  exist_ok=True)
     os.makedirs(f"{path}/data", exist_ok=True)
 
+    # QUESTサーバー経由: get_CHI_Data(count, True)
+    # ローカルファイル:   get_CHI_Data(count, local_base="data")
     s = g.get_CHI_Data(count, True)
     t_ip,  ip  = s.get_ip()
     t_inj, inj = s.get_inj()
