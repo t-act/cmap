@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>C-MAP プロジェクトまとめ</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #161b22;
+    --border: #30363d;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #f0883e;
+    --green: #3fb950;
+    --code-bg: #1c2128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Helvetica Neue", "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.7;
+  }
+  .container { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 2.4rem;
+    letter-spacing: -0.02em;
+  }
+  h1 .sub { color: var(--accent); font-weight: 400; font-size: 1rem; display: block; margin-top: 6px; }
+  h2 {
+    font-size: 1.4rem;
+    margin: 40px 0 14px;
+    padding-left: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  h3 { font-size: 1.05rem; margin: 22px 0 8px; color: var(--accent2); }
+  p { margin: 8px 0; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: #ffa657;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--fg); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th { background: var(--panel); color: var(--accent); }
+  tr:nth-child(even) td { background: rgba(110,118,129,0.08); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card h4 {
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: 0.95rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .card p { margin: 0; font-size: 0.88rem; color: var(--muted); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    background: rgba(88,166,255,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(88,166,255,0.4);
+    margin-right: 4px;
+  }
+  .pipeline {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    margin: 14px 0;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.85rem;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--fg);
+  }
+  .arrow { color: var(--accent2); }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .meta span::before { content: "•"; margin-right: 8px; color: var(--border); }
+  .meta span:first-child::before { content: ""; margin: 0; }
+  .perf-bar {
+    display: inline-block;
+    height: 8px;
+    background: linear-gradient(90deg, var(--green), var(--accent));
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>C-MAP
+    <span class="sub">CHI Magnetic Analysis Program — QUEST トカマク 磁気面再構成</span>
+  </h1>
+  <div class="meta">
+    <span>Python 3.10+</span>
+    <span>Numba JIT + prange</span>
+    <span>NumPy / SciPy</span>
+    <span>Taylor 緩和仮定 (λ = const.)</span>
+    <span>refactor/high-performance ブランチ</span>
+  </div>
+</header>
+
+<h2>概要</h2>
+<p>
+  <b>C-MAP</b> は QUEST トカマクの <b>CHI (Coaxial Helicity Injection)</b> プラズマを対象とした磁気面再構成プログラムです。
+  Taylor 緩和後の状態 (<code>λ = const.</code>) を仮定し、ピックアップコイル計測 <code>Bz</code> から
+  ポロイダル磁束分布・ポロイダル電流分布・Z-Bz プロファイルを再構成します。
+</p>
+<p>仮定条件の詳細は <i>T. Motoki, Master thesis (2024)</i> を参照。</p>
+
+<h2>入出力</h2>
+<div class="grid">
+  <div class="card">
+    <h4>入力</h4>
+    <p>TF / PF コイル電流、入射 (Gun) 電流、トロイダル電流、ピックアップコイル <code>Bz</code></p>
+  </div>
+  <div class="card">
+    <h4>出力</h4>
+    <p>2D ポロイダル磁束コンタ、2D ポロイダル電流分布、Z-Bz プロファイル比較</p>
+  </div>
+  <div class="card">
+    <h4>保存先</h4>
+    <p><code>test30_#&lt;count&gt;/data/</code> (CSV) と <code>img/</code> (PNG)</p>
+  </div>
+</div>
+
+<h2>ファイル構成</h2>
+<pre><code>cmap/
+├── main.py                  # エントリポイント (109 行のオーケストレータ)
+├── get_data.py              # QUEST サーバー / ローカルからのデータ取得
+├── mfield_sub.py            # 後方互換ラッパー (fitting_bz 等)
+├── Parameter.py             # 後方互換エクスポート
+│
+├── cmaplib/                 # コアライブラリ
+│   ├── grid.py              # R-Z グリッド管理
+│   ├── tokamak_config.py    # 装置形状・コイル配置
+│   ├── electromagnetics.py  # ベクトル化電磁場計算
+│   ├── field_line_tracer.py # Numba JIT + prange 磁力線追跡
+│   ├── greens_function.py   # GreenFunction A_0 (3.4 GB) 管理
+│   ├── solver.py            # EquilibriumSolver 収束ループ
+│   ├── preparation.py       # 時刻ステップ前処理
+│   ├── results.py           # CSV 出力管理
+│   ├── plotting.py          # プロット関数群
+│   └── utils.py             # nint, cd_main 等
+│
+└── modules/
+    ├── mfile_py.bin         # グリーン関数行列 A_0
+    ├── PFdata.csv           # PF / TF コイル電流
+    ├── ele_posi.csv         # 容器壁マスク
+    └── Qvessel.png          # QUEST 容器断面図</code></pre>
+
+<h2>主要モジュール</h2>
+<div class="grid">
+  <div class="card">
+    <h4>main.py</h4>
+    <p>109 行に圧縮されたオーケストレータ。ショット番号・解析時刻配列を編集して実行。</p>
+  </div>
+  <div class="card">
+    <h4>EquilibriumSolver</h4>
+    <p>収束ループ本体 (415 行)。磁力線追跡 → λ 推定 → A_phi 再計算を反復。</p>
+  </div>
+  <div class="card">
+    <h4>GreenFunction</h4>
+    <p>3.4 GB のグリーン関数行列 <code>A_0</code> を起動時にロードし <code>einsum</code> で集約。</p>
+  </div>
+  <div class="card">
+    <h4>field_line_tracer</h4>
+    <p>Numba JIT + <code>prange</code> による並列磁力線追跡。コア計算ホットスポット。</p>
+  </div>
+  <div class="card">
+    <h4>prepare_time_step</h4>
+    <p>真空場計算・<code>Bz</code> フィッティング・<code>ikr0/ikz0/elf0</code> 設定。</p>
+  </div>
+  <div class="card">
+    <h4>TokamakConfig</h4>
+    <p>QUEST 装置形状・PF/TF コイル配置・コイル電流時系列を保持。</p>
+  </div>
+</div>
+
+<h2>データフロー</h2>
+<div class="pipeline">[modules/]                       [QUEST サーバー]
+ mfile_py.bin (3.4 GB)            get_data.py
+ ele_posi.csv                       │
+ PFdata.csv                         ▼
+ Qvessel.png                  ip / inj / G_array / bz_puc
+       │                            │
+       ▼                            ▼
+ GreenFunction              ┌──────────────────┐
+       │                    │ prepare_time_step │  → MV_field.csv / electrode.csv
+       │                    └────────┬──────────┘
+       │                             ▼
+       └──────────────▶  EquilibriumSolver.solve_time_step()
+                          ├ 磁力線追跡 (Numba prange)
+                          ├ λ = const. 収束ループ
+                          └ ResultsManager (反復 CSV / PNG)
+                                  │
+                                  ▼
+                         data/  M_field_{t}.csv
+                                J_field_{t}.csv
+                                z_Bz_{t}.csv
+                                  │
+                                  ▼
+                         plotting.py
+                          ├ field_cont / psi_cont
+                          └ Bz-Z PNG → img/</div>
+
+<h2>パフォーマンス最適化</h2>
+<table>
+  <thead>
+    <tr><th>処理</th><th>手法</th><th>向上倍率 (目安)</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>磁力線追跡</td>
+      <td>Numba JIT + prange 並列化</td>
+      <td><span class="perf-bar" style="width:180px"></span>~300–600x</td>
+    </tr>
+    <tr>
+      <td>真空場計算</td>
+      <td>NumPy ブロードキャスト (<code>cal_vecp_2_grid</code>)</td>
+      <td><span class="perf-bar" style="width:220px"></span>~1000x</td>
+    </tr>
+    <tr>
+      <td>A_phi 集約</td>
+      <td><code>np.einsum</code> テンソル縮約</td>
+      <td><span class="perf-bar" style="width:90px"></span>~100x</td>
+    </tr>
+    <tr>
+      <td>B 場有限差分</td>
+      <td>配列スライス置換</td>
+      <td><span class="perf-bar" style="width:90px"></span>~100x</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>使い方</h2>
+<pre><code># main.py の以下の変数を編集
+count     = 53034      # ショット番号
+t_ana_arr = [18.740]   # 解析時刻 [ms]
+
+# 実行
+python main.py</code></pre>
+<p>結果は <code>test30_#&lt;count&gt;/</code> 以下に保存されます。</p>
+
+<h2>動作環境</h2>
+<table>
+  <tr><th>項目</th><th>要件</th></tr>
+  <tr><td>OS</td><td>macOS (推奨)</td></tr>
+  <tr><td>Python</td><td>3.10 以上</td></tr>
+  <tr><td>主要ライブラリ</td><td>numpy, scipy, matplotlib, numba, Pillow, scikit-learn, tqdm</td></tr>
+  <tr><td>データソース</td><td>QUEST サーバーへのマウント推奨 (ローカル読込モードも有り)</td></tr>
+</table>
+
+<h2>処理ステップ (main.py 視点)</h2>
+<ol>
+  <li><code>cd_main()</code> でカレントを <code>main.py</code> 位置に移動</li>
+  <li><code>Grid</code> / <code>TokamakConfig</code> 初期化</li>
+  <li><code>get_CHI_Data(count)</code> で <code>ip / inj / G / bz_puc</code> 取得</li>
+  <li>入射電流ピーク・減衰時刻 (<code>t_inj_0</code> / <code>t_decay</code>) 抽出</li>
+  <li><code>GreenFunction</code> ロード (<code>mfile_py.bin</code>)</li>
+  <li>時刻ループ
+    <ul>
+      <li><code>prepare_time_step()</code> で真空場・フィット・<code>ikr0/ikz0</code> 設定</li>
+      <li><code>EquilibriumSolver.solve_time_step()</code> で λ 収束ループ</li>
+      <li><code>plot_magnetic_field</code> / <code>plot_psi</code> / <code>plot_bz_profile</code> で可視化</li>
+    </ul>
+  </li>
+  <li><code>m_in.csv</code> 出力 + 経過時間表示</li>
+</ol>
+
+<h2>最近のリファクタリング履歴</h2>
+<ul>
+  <li><span class="badge">feat</span> <code>get_data</code> にローカルファイル読込モード追加</li>
+  <li><span class="badge">docs</span> README にデータフロー図 (Mermaid) を追加</li>
+  <li><span class="badge">feat</span> <code>main.py</code> を 109 行のオーケストレータに圧縮</li>
+  <li><span class="badge">refactor</span> <code>Grid</code>・<code>TokamakConfig</code> を統合し責務分離</li>
+</ul>
+
+<footer>
+  Takuto MOTOKI &lt;takuto.505521@gmail.com&gt; — C-MAP project summary
+</footer>
+
+</div>
+</body>
+</html>
